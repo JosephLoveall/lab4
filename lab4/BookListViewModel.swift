@@ -3,11 +3,7 @@ import Foundation
 
 class BookListViewModel: ObservableObject {
 
-    @Published private(set) var books: [Book] = [
-        Book(title: "Book1", author: "author1", genre: "genre1", price: 69.67),
-        Book(title: "Book2", author: "author2", genre: "genre2", price: 69.67),
-        Book(title: "Book3", author: "author3", genre: "genre3", price: 67.69)
-    ]
+    @Published private(set) var books: [Book] = []
 
     @Published var currentIndex: Int = 0
     private var lastSearchIndex: Int?
