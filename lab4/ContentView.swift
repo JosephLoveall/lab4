@@ -1,73 +1,37 @@
-//
-//  ContentView.swift
-//  lab4
-//
-//  Created by Joseph Loveall (Student) on 3/2/26.
-//
-
 import SwiftUI
+import Foundation
 
 struct ContentView: View {
     @StateObject private var vm = BookListViewModel()
-    
-    @State private var showSearch = false
-    @State private var showDelete = false
-    
-    @State private var showAdd = false
+
+    private enum ActiveSheet: Identifiable {
+        case search, add, delete
+        var id: Int { hashValue }
+    }
+
+    @State private var activeSheet: ActiveSheet?
     @State private var showOops = false
     @State private var oopsMessage = ""
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack {
                 Spacer()
-
-                if let book = vm.currentBook {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(Color.blue.opacity(0.65))
-                            .frame(height: 350)
-                            .padding(.horizontal)
-
-                        VStack(spacing: 8) {
-                            Text("Title: \(book.title)")
-                            Text("Author: \(book.author)")
-                            Text("Genre: \(book.genre)")
-                            Text(String(format: "Price: %.2f", book.price))
-                        }
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                    }
-                } else {
-                    VStack {
-                        Text("Preview Unavailable")
-                        Text("Please add your first book")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
+                bookCard
                 Spacer()
             }
             .navigationTitle("BookList")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-
-                //SEARCH
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button { showSearch = true } label: { Image(systemName: "magnifyingglass") }
-                    Button { showAdd = true } label: { Image(systemName: "plus") }
+                    Button { activeSheet = .search } label: { Image(systemName: "magnifyingglass") }
+                    Button { activeSheet = .add } label: { Image(systemName: "plus") }
                 }
 
-                //DELETE
                 ToolbarItem(placement: .bottomBar) {
-                    Button {
-                        showDelete = true
-                    } label: {
-                        Image(systemName: "trash")
-                    }
+                    Button { activeSheet = .delete } label: { Image(systemName: "trash") }
                 }
 
-                //PREVIOUS/NEXT
                 ToolbarItemGroup(placement: .bottomBar) {
                     Spacer()
 
@@ -86,6 +50,8 @@ struct ContentView: View {
                             showOops = true
                         }
                     }
+
+                    Spacer()
                 }
             }
             .alert("Oops...", isPresented: $showOops) {
@@ -93,43 +59,60 @@ struct ContentView: View {
             } message: {
                 Text(oopsMessage)
             }
-
-            //SEARCH SHEET
-            .sheet(isPresented: $showSearch) {
-                SearchSheet(vm: vm)
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+                case .search: SearchSheet(vm: vm)
+                case .add: AddSheet(vm: vm)
+                case .delete: DeleteSheet(vm: vm)
+                }
             }
+        }
+    }
 
-            //DELETE SHEET
-            .sheet(isPresented: $showDelete) {
-                DeleteSheet(vm: vm)
-                
+    @ViewBuilder
+    private var bookCard: some View {
+        if let book = vm.currentBook {
+            ZStack {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.blue.opacity(0.65))
+                    .frame(height: 650)
+                    .padding(.horizontal)
+
+                VStack(spacing: 8) {
+                    Text("Title: \(book.title)")
+                    Text("Author: \(book.author)")
+                    Text("Genre: \(book.genre)")
+                    Text(String(format: "Price: %.2f", book.price))
+                }
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
             }
-            //AADD SHEET
-            .sheet(isPresented: $showAdd) {
-                AddSheet(vm: vm)
+        } else {
+            VStack {
+                Text("Preview Unavailable")
+                Text("Please add your first book")
+                    .foregroundStyle(.secondary)
             }
         }
     }
 }
 struct SearchSheet: View {
     @ObservedObject var vm: BookListViewModel
-    @Environment(\.dismiss) var dismiss
+    @Environment(\.dismiss) private var dismiss
 
     @State private var query = ""
     @State private var results: [Int] = []
 
-    // Edit fields
     @State private var editTitle = ""
     @State private var editAuthor = ""
     @State private var editGenre = ""
     @State private var editPrice = ""
-    
-    @State private var showAdd = false
+
     @State private var showMessage = false
     @State private var message = ""
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section("Search Book") {
                     TextField("Enter Title or Genre", text: $query)
@@ -145,15 +128,12 @@ struct SearchSheet: View {
 
                 Section("Results") {
                     if results.isEmpty {
-                        Text("No results")
-                            .foregroundStyle(.secondary)
+                        Text("No results").foregroundStyle(.secondary)
                     } else {
                         ForEach(results, id: \.self) { index in
                             Button {
-                                // Focus the selected book (sets currentIndex + lastSearchIndex)
-                                vm.focusResult(index: index)
+                                vm.selectResult(at: index)
 
-                                // Prefill edit fields from the selected book
                                 if let b = vm.book(at: index) {
                                     editTitle = b.title
                                     editAuthor = b.author
@@ -161,7 +141,7 @@ struct SearchSheet: View {
                                     editPrice = String(format: "%.2f", b.price)
                                 }
 
-                                message = "Selected: \(vm.book(at: index)?.title ?? "")"
+                                message = "Selected."
                                 showMessage = true
                             } label: {
                                 VStack(alignment: .leading) {
@@ -189,32 +169,24 @@ struct SearchSheet: View {
                             return
                         }
 
-                        let ok = vm.editLastSearched(
+                        let ok = vm.editSelectedResult(
                             title: editTitle,
                             author: editAuthor,
                             genre: editGenre,
                             price: p
                         )
 
-                        if ok {
-                            message = "Book updated."
-                            showMessage = true
-                        } else {
-                            message = "Select a record from Results first."
-                            showMessage = true
-                        }
+                        message = ok ? "Book updated." : "Select a record from Results first."
+                        showMessage = true
                     }
                 }
             }
             .navigationTitle("Search Book")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button("Done") { dismiss() }
                 }
-            }
-            .sheet(isPresented: $showAdd) {
-                AddSheet(vm: vm)
             }
             .alert("Message", isPresented: $showMessage) {
                 Button("OK", role: .cancel) { }
@@ -224,16 +196,17 @@ struct SearchSheet: View {
         }
     }
 }
+
 struct DeleteSheet: View {
     @ObservedObject var vm: BookListViewModel
-    @Environment(\.dismiss) var dismiss
+    @Environment(\.dismiss) private var dismiss
 
     @State private var titleToDelete = ""
     @State private var showMessage = false
     @State private var message = ""
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 20) {
                 TextField("Enter Title to Delete", text: $titleToDelete)
                     .textFieldStyle(.roundedBorder)
@@ -250,7 +223,7 @@ struct DeleteSheet: View {
             .navigationTitle("Delete Book")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button("Done") { dismiss() }
                 }
             }
@@ -262,9 +235,10 @@ struct DeleteSheet: View {
         }
     }
 }
+
 struct AddSheet: View {
     @ObservedObject var vm: BookListViewModel
-    @Environment(\.dismiss) var dismiss
+    @Environment(\.dismiss) private var dismiss
 
     @State private var title = ""
     @State private var author = ""
@@ -275,7 +249,7 @@ struct AddSheet: View {
     @State private var message = ""
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section("Add Book") {
                     TextField("Title", text: $title)
@@ -286,7 +260,7 @@ struct AddSheet: View {
 
                     Button("Add") {
                         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if t.isEmpty {
+                        guard !t.isEmpty else {
                             message = "Title is required."
                             showMessage = true
                             return
@@ -306,15 +280,12 @@ struct AddSheet: View {
             .navigationTitle("Add Book")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button("Done") { dismiss() }
                 }
             }
             .alert("Message", isPresented: $showMessage) {
-                Button("OK") {
-                    // after adding, return to main so blue card updates
-                    dismiss()
-                }
+                Button("OK") { dismiss() }
             } message: {
                 Text(message)
             }
